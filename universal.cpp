@@ -67,13 +67,6 @@ HRESULT __stdcall hookD3D11Present(IDXGISwapChain* pSwapChain, UINT SyncInterval
 	ScreenCenterX = viewport.Width / 2.0f;
 	ScreenCenterY = viewport.Height / 2.0f;
 
-	//call before you draw
-	if(RenderTargetView != NULL)
-	{
-	pContext->OMGetRenderTargets(1, &RenderTargetView, NULL);
-	pContext->OMSetRenderTargets(1, &RenderTargetView, NULL);
-	}
-
 	//if (pFontWrapper)
 		//pFontWrapper->DrawString(pContext, L"D3D11 Hook", 14, 16.0f, 16.0f, 0xffff1612, FW1_RESTORESTATE);
 
