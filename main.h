@@ -31,8 +31,8 @@ float ScreenCenterY;
 
 //vertex
 ID3D11Buffer *veBuffer;
-UINT Stride;
-UINT veBufferOffset;
+UINT Stride = 0;
+UINT veBufferOffset = 0;
 D3D11_BUFFER_DESC vedesc;
 
 //index
@@ -42,6 +42,7 @@ UINT        inOffset;
 D3D11_BUFFER_DESC indesc;
 
 //rendertarget
+ID3D11Texture2D* RenderTargetTexture;
 ID3D11RenderTargetView* RenderTargetView = NULL;
 
 //shader
@@ -73,22 +74,6 @@ char *GetDirectoryFile(char *filename)
 	strcpy_s(path, dlldir);
 	strcat_s(path, filename);
 	return path;
-}
-
-//log
-void Log(const char *fmt, ...)
-{
-	if (!fmt)	return;
-
-	char		text[4096];
-	va_list		ap;
-	va_start(ap, fmt);
-	vsprintf_s(text, fmt, ap);
-	va_end(ap);
-
-	ofstream logfile(GetDirectoryFile("log.txt"), ios::app);
-	if (logfile.is_open() && text)	logfile << text << endl;
-	logfile.close();
 }
 
 //==========================================================================================================================
@@ -483,7 +468,6 @@ void MapBuffer(ID3D11Buffer* pStageBuffer, void** ppData, UINT* pByteWidth)
 void UnmapBuffer(ID3D11Buffer* pStageBuffer)
 {
 	pContext->Unmap(pStageBuffer, 0);
-	SAFE_RELEASE(pStageBuffer);
 }
 
 ID3D11Buffer* CopyBufferToCpu(ID3D11Buffer* pBuffer)
@@ -583,14 +567,18 @@ void AddModel(ID3D11DeviceContext* pContext)
 
 
 	Vec2 o;
-	o.x = ScreenCenterX + ScreenCenterX * vWorldViewProj.x / vWorldViewProj.w;
-	o.y = ScreenCenterY + ScreenCenterY * -vWorldViewProj.y / vWorldViewProj.w;
-
-	if(o.x != ScreenCenterX && o.y != ScreenCenterY)//do not aim at reload symbol
+	if (o.x != ScreenCenterX)//do not aim at reload symbol
 	{
+	o.x = ScreenCenterX + ScreenCenterX * vWorldViewProj.x / vWorldViewProj.w;
+	o.y = ScreenCenterY - ScreenCenterY * vWorldViewProj.y / vWorldViewProj.w;
+	}
+	else
+	{
+		o.x = -1.0f;
+		o.y = -1.0f;
+	}
 	AimEspInfo_t pAimEspInfo = { static_cast<float>(o.x), static_cast<float>(o.y + (sOptions[6].Function * 10)) }; //aimheight for hp bars
 	AimEspInfo.push_back(pAimEspInfo);
-	}
 }
 
 //==========================================================================================================================

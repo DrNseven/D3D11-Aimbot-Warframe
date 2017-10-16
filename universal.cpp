@@ -12,15 +12,15 @@
 #include "FW1FontWrapper/FW1FontWrapper.h" //font
 
 
-typedef HRESULT(__stdcall *D3D11ResizeBuffersHook) (IDXGISwapChain *pSwapChain, UINT BufferCount, UINT Width, UINT Height, DXGI_FORMAT NewFormat, UINT SwapChainFlags);
 typedef HRESULT(__stdcall *D3D11PresentHook) (IDXGISwapChain* pSwapChain, UINT SyncInterval, UINT Flags);
+typedef HRESULT(__stdcall *D3D11ResizeBuffersHook) (IDXGISwapChain *pSwapChain, UINT BufferCount, UINT Width, UINT Height, DXGI_FORMAT NewFormat, UINT SwapChainFlags);
 //typedef void(__stdcall *D3D11DrawIndexedHook) (ID3D11DeviceContext* pContext, UINT IndexCount, UINT StartIndexLocation, INT BaseVertexLocation);
 typedef void(__stdcall *D3D11PSSetShaderResourcesHook) (ID3D11DeviceContext* pContext, UINT StartSlot, UINT NumViews, ID3D11ShaderResourceView *const *ppShaderResourceViews);
 typedef void(__stdcall *D3D11DrawHook) (ID3D11DeviceContext* pContext, UINT VertexCount, UINT StartVertexLocation);
 
 
-D3D11ResizeBuffersHook phookD3D11ResizeBuffers = NULL;
 D3D11PresentHook phookD3D11Present = NULL;
+D3D11ResizeBuffersHook phookD3D11ResizeBuffers = NULL;
 //D3D11DrawIndexedHook phookD3D11DrawIndexed = NULL;
 D3D11PSSetShaderResourcesHook phookD3D11PSSetShaderResources = NULL;
 D3D11DrawHook phookD3D11Draw = NULL;
@@ -40,15 +40,10 @@ IFW1FontWrapper *pFontWrapper = NULL;
 
 //==========================================================================================================================
 
-/// \cond HIDDEN_SYMBOLS
-static const IID ID3D11Texture2D_uuid = { 0x6f15aaf2,0xd208,0x4e89,{ 0x9a,0xb4,0x48,0x95,0x35,0xd3,0x4f,0x9c } };
-
-//==========================================================================================================================
-
 HRESULT __stdcall hookD3D11ResizeBuffers(IDXGISwapChain *pSwapChain, UINT BufferCount, UINT Width, UINT Height, DXGI_FORMAT NewFormat, UINT SwapChainFlags)
 {
 	if (RenderTargetView != NULL)
-	SAFE_RELEASE(RenderTargetView);
+		SAFE_RELEASE(RenderTargetView);
 
 	return phookD3D11ResizeBuffers(pSwapChain, BufferCount, Width, Height, NewFormat, SwapChainFlags);
 }
@@ -69,38 +64,33 @@ HRESULT __stdcall hookD3D11Present(IDXGISwapChain* pSwapChain, UINT SyncInterval
 			pSwapChain->GetDevice(__uuidof(pDevice), (void**)&pDevice);
 			pDevice->GetImmediateContext(&pContext);
 		}
-
+		
 		//create font
 		HRESULT hResult = FW1CreateFactory(FW1_VERSION, &pFW1Factory);
 		hResult = pFW1Factory->CreateFontWrapper(pDevice, L"Tahoma", &pFontWrapper);
 		pFW1Factory->Release();
-
+		
 		//load cfg settings
 		LoadCfg();
 	}
 
-	//viewport
-	pContext->RSGetViewports(&vps, &viewport);
-	ScreenCenterX = viewport.Width / 2.0f;
-	ScreenCenterY = viewport.Height / 2.0f;
-
 	//create rendertarget
-	if(RenderTargetView == NULL)
+	if (RenderTargetView == NULL)
 	{
 		//Log("called");
+
+		//viewport
+		pContext->RSGetViewports(&vps, &viewport);
+		ScreenCenterX = viewport.Width / 2.0f;
+		ScreenCenterY = viewport.Height / 2.0f;
+
 		ID3D11Texture2D* pBackBuffer = NULL;
-
-		pSwapChain->GetBuffer(0,__uuidof(ID3D11Texture2D), (LPVOID*)&pBackBuffer);
-
+		pSwapChain->GetBuffer(0, __uuidof(ID3D11Texture2D), (LPVOID*)&pBackBuffer);
 		pDevice->CreateRenderTargetView(pBackBuffer, NULL, &RenderTargetView);
 		pBackBuffer->Release();
 	}
 	else //call before you draw
-	pContext->OMSetRenderTargets(1, &RenderTargetView, NULL);
-
-	if (RenderTargetView == NULL)
-		RenderTargetView->Release();
-
+		pContext->OMSetRenderTargets(1, &RenderTargetView, NULL);
 
 	//if (pFontWrapper)
 		//pFontWrapper->DrawString(pContext, L"D3D11 Hook", 14, 16.0f, 16.0f, 0xffff1612, FW1_RESTORESTATE);
@@ -108,7 +98,7 @@ HRESULT __stdcall hookD3D11Present(IDXGISwapChain* pSwapChain, UINT SyncInterval
 	//menu
 	if (IsReady() == false)
 	{
-		Init_Menu(pContext, L"Menu", 100, 120);
+		Init_Menu(pContext, L"D3D11 Menu", 100, 120);
 		Do_Menu();
 		Color_Font = WHITE;
 		Color_Off = RED;
@@ -118,86 +108,86 @@ HRESULT __stdcall hookD3D11Present(IDXGISwapChain* pSwapChain, UINT SyncInterval
 	}
 	Draw_Menu();
 	Navigation();
-
+	
 
 	//draw aimpoint/esp
-	if (sOptions[0].Function == 1) //if esp is turned on in menu
-		if (AimEspInfo.size() != NULL)
+	if (sOptions[0].Function==1) //if esp is turned on in menu
+	if (AimEspInfo.size() != NULL)
+	{
+		for (unsigned int i = 0; i < AimEspInfo.size(); i++)
 		{
-			for (unsigned int i = 0; i < AimEspInfo.size(); i++)
+			//text esp
+			if (AimEspInfo[i].vOutX > 1 && AimEspInfo[i].vOutY > 1 && AimEspInfo[i].vOutX < viewport.Width && AimEspInfo[i].vOutY < viewport.Height)
 			{
-				//text esp
-				if (AimEspInfo[i].vOutX > 1 && AimEspInfo[i].vOutY > 1 && AimEspInfo[i].vOutX < viewport.Width && AimEspInfo[i].vOutY < viewport.Height)
-				{
-					if (pFontWrapper)
-						pFontWrapper->DrawString(pContext, L"o", 14, (int)AimEspInfo[i].vOutX, (int)AimEspInfo[i].vOutY, 0xffff1612, FW1_RESTORESTATE | FW1_NOGEOMETRYSHADER | FW1_CENTER | FW1_ALIASED);
-				}
+				if (pFontWrapper)
+				pFontWrapper->DrawString(pContext, L"o", 14, AimEspInfo[i].vOutX, AimEspInfo[i].vOutY, 0xffff1612, FW1_RESTORESTATE| FW1_CENTER | FW1_ALIASED);
 			}
 		}
-
+	}
+	
 	//RMouse|LMouse|Shift|Ctrl|Alt|Space|X|C
 	if (sOptions[3].Function == 0) Daimkey = VK_RBUTTON;
-	else if (sOptions[3].Function == 1) Daimkey = VK_LBUTTON;
-	else if (sOptions[3].Function == 2) Daimkey = VK_SHIFT;
-	else if (sOptions[3].Function == 3) Daimkey = VK_CONTROL;
-	else if (sOptions[3].Function == 4) Daimkey = VK_MENU;
-	else if (sOptions[3].Function == 5) Daimkey = VK_SPACE;
-	else if (sOptions[3].Function == 6) Daimkey = 0x58; //X
-	else if (sOptions[3].Function == 7) Daimkey = 0x43; //C
+	if (sOptions[3].Function == 1) Daimkey = VK_LBUTTON;
+	if (sOptions[3].Function == 2) Daimkey = VK_SHIFT;
+	if (sOptions[3].Function == 3) Daimkey = VK_CONTROL;
+	if (sOptions[3].Function == 4) Daimkey = VK_MENU;
+	if (sOptions[3].Function == 5) Daimkey = VK_SPACE;
+	if (sOptions[3].Function == 6) Daimkey = 0x58; //X
+	if (sOptions[3].Function == 7) Daimkey = 0x43; //C
 	aimheight = sOptions[7].Function;//aimheight
-
+	
 	//aimbot
-	if ((sOptions[1].Function == 1) || (sOptions[2].Function == 1))//aimbot pve, aimbot pvp
-		if (AimEspInfo.size() != NULL)
+	if((sOptions[1].Function == 1)||(sOptions[2].Function == 1))//aimbot pve, aimbot pvp
+	if (AimEspInfo.size() != NULL)
+	{
+		UINT BestTarget = -1;
+		DOUBLE fClosestPos = 99999;
+
+		for (unsigned int i = 0; i < AimEspInfo.size(); i++)
 		{
-			UINT BestTarget = -1;
-			DOUBLE fClosestPos = 99999;
+			//aimfov
+			float radiusx = (sOptions[5].Function*10.0f) * (ScreenCenterX / 100.0f);
+			float radiusy = (sOptions[5].Function*10.0f) * (ScreenCenterY / 100.0f);
 
-			for (unsigned int i = 0; i < AimEspInfo.size(); i++)
-			{
-				//aimfov
-				float radiusx = (sOptions[5].Function*10.0f) * (ScreenCenterX / 100.0f);
-				float radiusy = (sOptions[5].Function*10.0f) * (ScreenCenterY / 100.0f);
+			//get crosshairdistance
+			AimEspInfo[i].CrosshairDst = GetmDst(AimEspInfo[i].vOutX, AimEspInfo[i].vOutY, ScreenCenterX, ScreenCenterY);
 
-				//get crosshairdistance
-				AimEspInfo[i].CrosshairDst = GetmDst(AimEspInfo[i].vOutX, AimEspInfo[i].vOutY, ScreenCenterX, ScreenCenterY);
+			//if in fov
+			if (AimEspInfo[i].vOutX >= ScreenCenterX - radiusx && AimEspInfo[i].vOutX <= ScreenCenterX + radiusx && AimEspInfo[i].vOutY >= ScreenCenterY - radiusy && AimEspInfo[i].vOutY <= ScreenCenterY + radiusy)
 
-				//if in fov
-				if (AimEspInfo[i].vOutX >= ScreenCenterX - radiusx && AimEspInfo[i].vOutX <= ScreenCenterX + radiusx && AimEspInfo[i].vOutY >= ScreenCenterY - radiusy && AimEspInfo[i].vOutY <= ScreenCenterY + radiusy)
-
-					//get closest/nearest target to crosshair
-					if (AimEspInfo[i].CrosshairDst < fClosestPos)
-					{
-						fClosestPos = AimEspInfo[i].CrosshairDst;
-						BestTarget = i;
-					}
-			}
-
-			//if nearest target to crosshair
-			if (BestTarget != -1)
-			{
-				double DistX = AimEspInfo[BestTarget].vOutX - ScreenCenterX;
-				double DistY = AimEspInfo[BestTarget].vOutY - ScreenCenterY;
-
-				//aimsens
-				DistX /= (1 + sOptions[4].Function);
-				DistY /= (1 + sOptions[4].Function);
-
-				//aim
-				if (GetAsyncKeyState(Daimkey) & 0x8000)
-					mouse_event(MOUSEEVENTF_MOVE, (float)DistX, (float)DistY, 0, NULL);
-
-				//autoshoot on
-				if ((!GetAsyncKeyState(VK_LBUTTON) && (sOptions[7].Function == 1) && (GetAsyncKeyState(Daimkey) & 0x8000)))
+				//get closest/nearest target to crosshair
+				if (AimEspInfo[i].CrosshairDst < fClosestPos)
 				{
-					if (!IsPressed)
-					{
-						mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
-						IsPressed = true;
-					}
+					fClosestPos = AimEspInfo[i].CrosshairDst;
+					BestTarget = i;
+				}
+		}
+
+		//if nearest target to crosshair
+		if (BestTarget != -1)
+		{
+			double DistX = AimEspInfo[BestTarget].vOutX - ScreenCenterX;
+			double DistY = AimEspInfo[BestTarget].vOutY - ScreenCenterY;
+
+			//aimsens
+			DistX /= (1 + sOptions[4].Function);
+			DistY /= (1 + sOptions[4].Function);
+
+			//aim
+			if(GetAsyncKeyState(Daimkey) & 0x8000)
+			mouse_event(MOUSEEVENTF_MOVE, (float)DistX, (float)DistY, 0, NULL);
+
+			//autoshoot on
+			if ((!GetAsyncKeyState(VK_LBUTTON) && (sOptions[7].Function == 1) && (GetAsyncKeyState(Daimkey) & 0x8000)))
+			{
+				if (!IsPressed)
+				{
+					mouse_event(MOUSEEVENTF_LEFTDOWN, 0, 0, 0, 0);
+					IsPressed = true;
 				}
 			}
 		}
+	}
 	AimEspInfo.clear();
 
 	//autoshoot off
@@ -210,10 +200,9 @@ HRESULT __stdcall hookD3D11Present(IDXGISwapChain* pSwapChain, UINT SyncInterval
 			astime = timeGetTime();
 		}
 	}
-
+	
 	return phookD3D11Present(pSwapChain, SyncInterval, Flags);
 }
-
 
 //==========================================================================================================================
 
@@ -227,10 +216,6 @@ HRESULT __stdcall hookD3D11Present(IDXGISwapChain* pSwapChain, UINT SyncInterval
 
 void __stdcall hookD3D11PSSetShaderResources(ID3D11DeviceContext* pContext, UINT StartSlot, UINT NumViews, ID3D11ShaderResourceView *const *ppShaderResourceViews)
 {
-	//pContext->OMGetRenderTargets(1, &ExtraRenderTarget, NULL);
-	//pContext->OMGetRenderTargets(1, &ExtraRenderTarget, NULL);
-	//Log("ExtraRenderTarget == %d", ExtraRenderTarget);
-
 	pssrStartSlot = StartSlot;
 
 	//resources
@@ -307,7 +292,7 @@ DWORD __stdcall InitializeHook(LPVOID)
 	do
 	{
 		hDXGIDLL = GetModuleHandle("dxgi.dll");
-		Sleep(4000);
+		Sleep(8000);
 	} while (!hDXGIDLL);
 	Sleep(100);
 
@@ -380,10 +365,10 @@ DWORD __stdcall InitializeHook(LPVOID)
 	pDeviceVTable = (DWORD_PTR*)pDeviceVTable[0];
 
 	if (MH_Initialize() != MH_OK) { return 1; }
-	if (MH_CreateHook((DWORD_PTR*)pSwapChainVtable[13], hookD3D11ResizeBuffers, reinterpret_cast<void**>(&phookD3D11ResizeBuffers)) != MH_OK) { return 1; }
-	if (MH_EnableHook((DWORD_PTR*)pSwapChainVtable[13]) != MH_OK) { return 1; }
 	if (MH_CreateHook((DWORD_PTR*)pSwapChainVtable[8], hookD3D11Present, reinterpret_cast<void**>(&phookD3D11Present)) != MH_OK) { return 1; }
 	if (MH_EnableHook((DWORD_PTR*)pSwapChainVtable[8]) != MH_OK) { return 1; }
+	if (MH_CreateHook((DWORD_PTR*)pSwapChainVtable[13], hookD3D11ResizeBuffers, reinterpret_cast<void**>(&phookD3D11ResizeBuffers)) != MH_OK) { return 1; }
+	if (MH_EnableHook((DWORD_PTR*)pSwapChainVtable[13]) != MH_OK) { return 1; }
 	//if (MH_CreateHook((DWORD_PTR*)pContextVTable[12], hookD3D11DrawIndexed, reinterpret_cast<void**>(&phookD3D11DrawIndexed)) != MH_OK) { return 1; }
 	//if (MH_EnableHook((DWORD_PTR*)pContextVTable[12]) != MH_OK) { return 1; }
 	if (MH_CreateHook((DWORD_PTR*)pContextVTable[8], hookD3D11PSSetShaderResources, reinterpret_cast<void**>(&phookD3D11PSSetShaderResources)) != MH_OK) { return 1; }
@@ -421,10 +406,10 @@ BOOL __stdcall DllMain(HINSTANCE hModule, DWORD dwReason, LPVOID lpReserved)
 
 	case DLL_PROCESS_DETACH: // A process unloads the DLL.
 		if (MH_Uninitialize() != MH_OK) { return 1; }
-		if (MH_DisableHook((DWORD_PTR*)pSwapChainVtable[13]) != MH_OK) { return 1; }
 		if (MH_DisableHook((DWORD_PTR*)pSwapChainVtable[8]) != MH_OK) { return 1; }
+		if (MH_DisableHook((DWORD_PTR*)pSwapChainVtable[13]) != MH_OK) { return 1; }
 		//if (MH_DisableHook((DWORD_PTR*)pContextVTable[12]) != MH_OK) { return 1; }
-		if (MH_DisableHook((DWORD_PTR*)pDeviceVTable[8]) != MH_OK) { return 1; }
+		if (MH_DisableHook((DWORD_PTR*)pContextVTable[8]) != MH_OK) { return 1; }
 		if (MH_DisableHook((DWORD_PTR*)pContextVTable[13]) != MH_OK) { return 1; }
 		break;
 	}
