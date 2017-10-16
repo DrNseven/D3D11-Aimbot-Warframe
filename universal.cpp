@@ -52,14 +52,14 @@ HRESULT __stdcall hookD3D11Present(IDXGISwapChain* pSwapChain, UINT SyncInterval
 			pSwapChain->GetDevice(__uuidof(pDevice), (void**)&pDevice);
 			pDevice->GetImmediateContext(&pContext);
 		}
-
-		//load cfg settings
-		LoadCfg();
 		
 		//create font
 		HRESULT hResult = FW1CreateFactory(FW1_VERSION, &pFW1Factory);
 		hResult = pFW1Factory->CreateFontWrapper(pDevice, L"Tahoma", &pFontWrapper);
 		pFW1Factory->Release();
+		
+		//load cfg settings
+		LoadCfg();
 	}
 	
 	//viewport
