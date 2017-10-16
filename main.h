@@ -31,8 +31,8 @@ float ScreenCenterY;
 
 //vertex
 ID3D11Buffer *veBuffer;
-UINT Stride = 0;
-UINT veBufferOffset = 0;
+UINT Stride;
+UINT veBufferOffset;
 D3D11_BUFFER_DESC vedesc;
 
 //index
@@ -42,7 +42,6 @@ UINT        inOffset;
 D3D11_BUFFER_DESC indesc;
 
 //rendertarget
-ID3D11Texture2D* RenderTargetTexture;
 ID3D11RenderTargetView* RenderTargetView = NULL;
 
 //shader
@@ -74,6 +73,22 @@ char *GetDirectoryFile(char *filename)
 	strcpy_s(path, dlldir);
 	strcat_s(path, filename);
 	return path;
+}
+
+//log
+void Log(const char *fmt, ...)
+{
+	if (!fmt)	return;
+
+	char		text[4096];
+	va_list		ap;
+	va_start(ap, fmt);
+	vsprintf_s(text, fmt, ap);
+	va_end(ap);
+
+	ofstream logfile(GetDirectoryFile("log.txt"), ios::app);
+	if (logfile.is_open() && text)	logfile << text << endl;
+	logfile.close();
 }
 
 //==========================================================================================================================
@@ -468,6 +483,7 @@ void MapBuffer(ID3D11Buffer* pStageBuffer, void** ppData, UINT* pByteWidth)
 void UnmapBuffer(ID3D11Buffer* pStageBuffer)
 {
 	pContext->Unmap(pStageBuffer, 0);
+	SAFE_RELEASE(pStageBuffer);
 }
 
 ID3D11Buffer* CopyBufferToCpu(ID3D11Buffer* pBuffer)
@@ -539,8 +555,8 @@ void AddModel(ID3D11DeviceContext* pContext)
 	m_pCurProjCB = CopyBufferToCpu(pProjCB);
 	SAFE_RELEASE(pProjCB);
 	
-	//if (m_pCurWorldViewCB == NULL || m_pCurProjCB == NULL)//uncomment if a game is crashing
-	//return;
+	if (m_pCurWorldViewCB == NULL || m_pCurProjCB == NULL)//uncomment if a game is crashing
+	return;
 	
 	float matWorldView[4][4];
 	{
