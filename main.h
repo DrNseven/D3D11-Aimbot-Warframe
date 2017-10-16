@@ -567,16 +567,9 @@ void AddModel(ID3D11DeviceContext* pContext)
 
 
 	Vec2 o;
-	if (o.x != ScreenCenterX)//do not aim at reload symbol
-	{
 	o.x = ScreenCenterX + ScreenCenterX * vWorldViewProj.x / vWorldViewProj.w;
 	o.y = ScreenCenterY - ScreenCenterY * vWorldViewProj.y / vWorldViewProj.w;
-	}
-	else
-	{
-		o.x = -1.0f;
-		o.y = -1.0f;
-	}
+
 	AimEspInfo_t pAimEspInfo = { static_cast<float>(o.x), static_cast<float>(o.y + (sOptions[6].Function * 10)) }; //aimheight for hp bars
 	AimEspInfo.push_back(pAimEspInfo);
 }
