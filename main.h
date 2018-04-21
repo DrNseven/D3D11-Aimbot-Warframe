@@ -1,27 +1,35 @@
-//d3d11 aimbot for warframe by n7
+//warframe multihack by n7, main.h
+
+//DX Includes
+#include <DirectXMath.h>
+using namespace DirectX;
 
 //==========================================================================================================================
 
 //features deafult settings
 int Folder1 = 1;
-int Item1 = 1; //sOptions[0].Function //esp
-int Item2 = 1; //sOptions[1].Function //aimbot pve
-int Item3 = 0; //sOptions[2].Function //aimbot pvp
-int Item4 = 0; //sOptions[3].Function //aimkey 0 = RMouse
-int Item5 = 3; //sOptions[4].Function //aimsens
-int Item6 = 4; //sOptions[5].Function //aimfov
-int Item7 = 4; //sOptions[6].Function //aimheight
-int Item8 = 0; //sOptions[7].Function //autoshoot
+int Item1 = 0; //sOptions[0].Function //wallhack
+int Item2 = 0; //sOptions[1].Function //chams
+int Item3 = 1; //sOptions[2].Function //esp
+int Item4 = 1; //sOptions[3].Function //aimbot
+int Item5 = 0; //sOptions[4].Function //aimkey 0 = RMouse
+int Item6 = 3; //sOptions[5].Function //aimsens
+int Item7 = 3; //sOptions[6].Function //aimfov
+int Item8 = 4; //sOptions[7].Function //aimheight
+int Item9 = 0; //sOptions[8].Function //autoshoot
+int Item10 = 0; //sOptions[9].Function //crosshair
 
 //globals
 DWORD Daimkey = VK_RBUTTON;		//aimkey
-int aimheight = 46;				//aim height value
+int aimheight = 0;				//aim height value
+int preaim = 0;					//praim to not aim behind
 unsigned int asdelay = 90;		//use x-999 (shoot for xx millisecs, looks more legit)
 bool IsPressed = false;			//
 DWORD astime = timeGetTime();	//autoshoot timer
 
 //init only once
 bool firstTime = true;
+bool firstTime2 = true;
 
 //viewport
 UINT vps = 1;
@@ -30,9 +38,11 @@ float ScreenCenterX;
 float ScreenCenterY;
 
 //vertex
+UINT veStartSlot;
+UINT veNumBuffers;
 ID3D11Buffer *veBuffer;
-UINT Stride = 0;
-UINT veBufferOffset = 0;
+UINT Stride;
+UINT veBufferOffset;
 D3D11_BUFFER_DESC vedesc;
 
 //index
@@ -51,16 +61,48 @@ ID3D11PixelShader* psGreen = NULL;
 
 //pssetshaderresources
 UINT pssrStartSlot;
+ID3D11ShaderResourceView* pShaderResView;
+ID3D11Resource *Resource;
 D3D11_SHADER_RESOURCE_VIEW_DESC  Descr;
-ID3D11ShaderResourceView* ShaderResourceView;
 D3D11_TEXTURE2D_DESC texdesc;
 
 //psgetConstantbuffers
-ID3D11Buffer *pcsBuffer;
-D3D11_BUFFER_DESC pscdesc;
 UINT pscStartSlot;
+UINT pscNumBuffers;
+ID3D11Buffer *pscBuffer;
+D3D11_BUFFER_DESC pscdesc;
+
+//vsgetconstantbuffers
+ID3D11Buffer *vsBuffer;
+UINT vsNumBuffers;
+D3D11_BUFFER_DESC vsdesc;
+
+UINT psStartSlot;
+UINT vsStartSlot;
+
+//create texture
+ID3D11Texture2D* texGreen = nullptr;
+ID3D11Texture2D* texRed = nullptr;
+
+//create shaderresourcevew
+ID3D11ShaderResourceView* texSRVg;
+ID3D11ShaderResourceView* texSRVr;
+
+//create samplerstate
+ID3D11SamplerState *pSamplerState;
+
+//#pragma intrinsic(_ReturnAddress) //Less indexes
+//#pragma intrinsic(_AddressOfReturnAddress) //Has more indexes
+
+static BOOL performance_loss = FALSE;
+
+//used for logging/cycling through values
+bool logger = false;
+UINT countnum = 1;
+char szString[64];
 
 #define SAFE_RELEASE(x) if (x) { x->Release(); x = NULL; }
+HRESULT hr;
 
 //==========================================================================================================================
 
@@ -76,6 +118,99 @@ char *GetDirectoryFile(char *filename)
 	return path;
 }
 
+//log
+void Log(const char *fmt, ...)
+{
+	if (!fmt)	return;
+
+	char		text[4096];
+	va_list		ap;
+	va_start(ap, fmt);
+	vsprintf_s(text, fmt, ap);
+	va_end(ap);
+
+	ofstream logfile(GetDirectoryFile("log.txt"), ios::app);
+	if (logfile.is_open() && text)	logfile << text << endl;
+	logfile.close();
+}
+
+//==========================================================================================================================
+
+//generate shader func
+HRESULT GenerateShader(ID3D11Device* pD3DDevice, ID3D11PixelShader** pShader, float r, float g, float b)
+{
+	/*
+	//texture sample chams bright
+	const char szCast[] =
+		"struct PS_INPUT\
+            {\
+            float4 pos : SV_POSITION;\
+            float4 col : COLOR0;\
+            float2 uv  : TEXCOORD0;\
+            };\
+            sampler sampler0;\
+            Texture2D texture0;\
+            \
+            float4 main(PS_INPUT input) : SV_Target\
+            {\
+            float4 out_col = input.col.bgra + texture0.Sample(sampler0, input.uv); \
+			out_col.g = %f; \
+			out_col.a = 1.0f; \
+            return out_col; \
+            }";
+	*/
+	
+	char szCast[] = "struct VS_OUT"
+		"{"
+		" float4 Position : SV_Position;"
+		" float4 Color : COLOR0;"
+		"};"
+
+		"float4 main( VS_OUT input ) : SV_Target"
+		"{"
+		" float4 fake;"
+		" fake.a = 1.0f;"
+		" fake.r = %f;"
+		" fake.g = %f;"
+		" fake.b = %f;"
+		" return fake;"
+		"}";
+	
+	ID3D10Blob* pBlob;
+	char szPixelShader[1000];
+
+	sprintf_s(szPixelShader, szCast, r, g, b);
+
+	ID3DBlob* d3dErrorMsgBlob;
+
+	HRESULT hr = D3DCompile(szPixelShader, sizeof(szPixelShader), "shader", NULL, NULL, "main", "ps_4_0", NULL, NULL, &pBlob, &d3dErrorMsgBlob);
+
+	if (FAILED(hr))
+		return hr;
+
+	hr = pD3DDevice->CreatePixelShader((DWORD*)pBlob->GetBufferPointer(), pBlob->GetBufferSize(), NULL, pShader);
+
+	if (FAILED(hr))
+		return hr;
+
+	return S_OK;
+}
+
+//==========================================================================================================================
+
+//wh
+UINT stencilRef = 0;
+D3D11_DEPTH_STENCIL_DESC Desc;
+ID3D11DepthStencilState* origDepthStencilState = NULL;
+ID3D11DepthStencilState* pDepthStencilState = NULL; 
+
+ID3D11DepthStencilState* depthStencilState;
+ID3D11DepthStencilState* depthStencilStatefalse;
+
+char *state;
+ID3D11RasterizerState * rwState;
+ID3D11RasterizerState * rsState;
+
 //==========================================================================================================================
 
 //menu
@@ -83,8 +218,10 @@ char *GetDirectoryFile(char *filename)
 
 #define T_FOLDER 1
 #define T_OPTION 2
-#define T_MULTIOPTION 3
-#define T_AIMKEYOPTION 4
+#define T_012OPTION 3
+#define T_MULTIOPTION 4
+#define T_MULTIOPTION2 5
+#define T_AIMKEYOPTION 6
 
 #define LineH 15
 
@@ -118,7 +255,7 @@ Menu sMenu;
 void SaveCfg()
 {
 	ofstream fout;
-	fout.open(GetDirectoryFile("wfd3d11.ini"), ios::trunc);
+	fout.open(GetDirectoryFile("warfd3d.ini"), ios::trunc);
 	fout << "Item1 " << sOptions[0].Function << endl;
 	fout << "Item2 " << sOptions[1].Function << endl;
 	fout << "Item3 " << sOptions[2].Function << endl;
@@ -127,6 +264,8 @@ void SaveCfg()
 	fout << "Item6 " << sOptions[5].Function << endl;
 	fout << "Item7 " << sOptions[6].Function << endl;
 	fout << "Item8 " << sOptions[7].Function << endl;
+	fout << "Item9 " << sOptions[8].Function << endl;
+	fout << "Item10 " << sOptions[9].Function << endl;
 	fout.close();
 }
 
@@ -134,7 +273,7 @@ void LoadCfg()
 {
 	ifstream fin;
 	string Word = "";
-	fin.open(GetDirectoryFile("wfd3d11.ini"), ifstream::in);
+	fin.open(GetDirectoryFile("warfd3d.ini"), ifstream::in);
 	fin >> Word >> Item1;
 	fin >> Word >> Item2;
 	fin >> Word >> Item3;
@@ -143,6 +282,8 @@ void LoadCfg()
 	fin >> Word >> Item6;
 	fin >> Word >> Item7;
 	fin >> Word >> Item8;
+	fin >> Word >> Item9;
+	fin >> Word >> Item10;
 	fin.close();
 }
 
@@ -177,6 +318,16 @@ void AddOption(LPCWSTR Name, int Pointer, int *Folder)
 	Items++;
 }
 
+void Add012Option(LPCWSTR Name, int Pointer, int *Folder)
+{
+	if (*Folder == 0)
+		return;
+	sOptions[Items].Name = Name;
+	sOptions[Items].Function = Pointer;
+	sOptions[Items].Type = T_012OPTION;
+	Items++;
+}
+
 void AddMultiOption(LPCWSTR Name, int Pointer, int *Folder)
 {
 	if (*Folder == 0)
@@ -184,6 +335,16 @@ void AddMultiOption(LPCWSTR Name, int Pointer, int *Folder)
 	sOptions[Items].Name = Name;
 	sOptions[Items].Function = Pointer;
 	sOptions[Items].Type = T_MULTIOPTION;
+	Items++;
+}
+
+void AddMultiOption2(LPCWSTR Name, int Pointer, int *Folder)
+{
+	if (*Folder == 0)
+		return;
+	sOptions[Items].Name = Name;
+	sOptions[Items].Function = Pointer;
+	sOptions[Items].Type = T_MULTIOPTION2;
 	Items++;
 }
 
@@ -235,12 +396,32 @@ void Navigation()
 		value--;
 	}
 
+	else if (sOptions[Cur_Pos].Type == T_012OPTION && GetAsyncKeyState(VK_RIGHT) & 1 && sOptions[Cur_Pos].Function <= 1)//max
+	{
+		value++;
+	}
+
+	else if (sOptions[Cur_Pos].Type == T_012OPTION && (GetAsyncKeyState(VK_LEFT) & 1) && sOptions[Cur_Pos].Function != 0)
+	{
+		value--;
+	}
+
 	else if (sOptions[Cur_Pos].Type == T_MULTIOPTION && GetAsyncKeyState(VK_RIGHT) & 1 && sOptions[Cur_Pos].Function <= 6)//max
 	{
 		value++;
 	}
 
 	else if (sOptions[Cur_Pos].Type == T_MULTIOPTION && (GetAsyncKeyState(VK_LEFT) & 1) && sOptions[Cur_Pos].Function != 0)
+	{
+		value--;
+	}
+
+	else if (sOptions[Cur_Pos].Type == T_MULTIOPTION2 && GetAsyncKeyState(VK_RIGHT) & 1 && sOptions[Cur_Pos].Function <= 14)//max
+	{
+		value++;
+	}
+
+	else if (sOptions[Cur_Pos].Type == T_MULTIOPTION2 && (GetAsyncKeyState(VK_LEFT) & 1) && sOptions[Cur_Pos].Function != 0)
 	{
 		value--;
 	}
@@ -302,6 +483,18 @@ void Draw_Menu()
 			}
 		}
 
+		if (sOptions[i].Type == T_012OPTION)
+		{
+			if (sOptions[i].Function == 0)
+				DrawTextF(pContext, L"Off", 14, sMenu.x + 150, sMenu.y + LineH*(i + 2), Color_On);
+
+			if (sOptions[i].Function == 1)
+				DrawTextF(pContext, L"PvE", 14, sMenu.x + 150, sMenu.y + LineH*(i + 2), Color_On);
+
+			if (sOptions[i].Function == 2)
+				DrawTextF(pContext, L"PvP", 14, sMenu.x + 150, sMenu.y + LineH*(i + 2), Color_On);
+		}
+
 		if (sOptions[i].Type == T_AIMKEYOPTION)
 		{
 			if (sOptions[i].Function == 0)
@@ -356,6 +549,57 @@ void Draw_Menu()
 				DrawTextF(pContext, L"7", 14, sMenu.x + 150, sMenu.y + LineH*(i + 2), Color_On);
 		}
 
+		if (sOptions[i].Type == T_MULTIOPTION2)
+		{
+			if (sOptions[i].Function == 0)
+				DrawTextF(pContext, L"0", 14, sMenu.x + 150, sMenu.y + LineH*(i + 2), Color_On);
+
+			if (sOptions[i].Function == 1)
+				DrawTextF(pContext, L"1", 14, sMenu.x + 150, sMenu.y + LineH*(i + 2), Color_On);
+
+			if (sOptions[i].Function == 2)
+				DrawTextF(pContext, L"2", 14, sMenu.x + 150, sMenu.y + LineH*(i + 2), Color_On);
+
+			if (sOptions[i].Function == 3)
+				DrawTextF(pContext, L"3", 14, sMenu.x + 150, sMenu.y + LineH*(i + 2), Color_On);
+
+			if (sOptions[i].Function == 4)
+				DrawTextF(pContext, L"4", 14, sMenu.x + 150, sMenu.y + LineH*(i + 2), Color_On);
+
+			if (sOptions[i].Function == 5)
+				DrawTextF(pContext, L"5", 14, sMenu.x + 150, sMenu.y + LineH*(i + 2), Color_On);
+
+			if (sOptions[i].Function == 6)
+				DrawTextF(pContext, L"6", 14, sMenu.x + 150, sMenu.y + LineH*(i + 2), Color_On);
+
+			if (sOptions[i].Function == 7)
+				DrawTextF(pContext, L"7", 14, sMenu.x + 150, sMenu.y + LineH*(i + 2), Color_On);
+
+			if (sOptions[i].Function == 8)
+				DrawTextF(pContext, L"8", 14, sMenu.x + 150, sMenu.y + LineH*(i + 2), Color_On);
+
+			if (sOptions[i].Function == 9)
+				DrawTextF(pContext, L"9", 14, sMenu.x + 150, sMenu.y + LineH*(i + 2), Color_On);
+
+			if (sOptions[i].Function == 10)
+				DrawTextF(pContext, L"10", 14, sMenu.x + 150, sMenu.y + LineH*(i + 2), Color_On);
+
+			if (sOptions[i].Function == 11)
+				DrawTextF(pContext, L"11", 14, sMenu.x + 150, sMenu.y + LineH*(i + 2), Color_On);
+
+			if (sOptions[i].Function == 12)
+				DrawTextF(pContext, L"12", 14, sMenu.x + 150, sMenu.y + LineH*(i + 2), Color_On);
+
+			if (sOptions[i].Function == 13)
+				DrawTextF(pContext, L"13", 14, sMenu.x + 150, sMenu.y + LineH*(i + 2), Color_On);
+
+			if (sOptions[i].Function == 14)
+				DrawTextF(pContext, L"14", 14, sMenu.x + 150, sMenu.y + LineH*(i + 2), Color_On);
+
+			if (sOptions[i].Function == 15)
+				DrawTextF(pContext, L"15", 14, sMenu.x + 150, sMenu.y + LineH*(i + 2), Color_On);
+		}
+
 		if (sOptions[i].Type == T_FOLDER)
 		{
 			if (sOptions[i].Function)
@@ -382,69 +626,37 @@ void Draw_Menu()
 #define RED 0xFFFF0000 
 #define GRAY 0xFF2F4F4F
 
-
 void Do_Menu()
 {
-	AddOption(L"Show Aimpoint", Item1, &Folder1);
-	AddOption(L"Aimbot PvE", Item2, &Folder1);
-	AddOption(L"Aimbot PvP", Item3, &Folder1);
-	AddMultiOptionText(L"Aimkey", Item4, &Folder1);
-	AddMultiOption(L"Aimsens", Item5, &Folder1);
-	AddMultiOption(L"Aimfov", Item6, &Folder1);
-	AddMultiOption(L"Aimheight", Item7, &Folder1);
-	AddOption(L"Autoshoot", Item8, &Folder1);
+	AddOption(L"Not Implemented", Item1, &Folder1);
+	AddOption(L"Not Implemented", Item2, &Folder1);
+	AddOption(L"Show Aimpoint", Item3, &Folder1);
+	Add012Option(L"Aimbot", Item4, &Folder1);
+	AddMultiOptionText(L"Aimkey", Item5, &Folder1);
+	AddMultiOption2(L"Aimsens", Item6, &Folder1);
+	AddMultiOption(L"Aimfov", Item7, &Folder1);
+	AddMultiOption(L"Aimheight", Item8, &Folder1);
+	AddOption(L"Autoshoot", Item9, &Folder1);
+	AddOption(L"Crosshair", Item10, &Folder1);
 }
 
 //==========================================================================================================================
 
 //w2s stuff
-struct Vec2
+struct vec2
 {
 	float x, y;
 };
 
-struct Vec3
+struct vec3
 {
 	float x, y, z;
 };
 
-struct Vec4
+struct vec4
 {
 	float x, y, z, w;
 };
-
-static Vec4 Vec4MulMat4x4(const Vec4& v, float(*mat4x4)[4])
-{
-	Vec4 o;
-	
-	o.x = v.x * mat4x4[0][0] + v.y * mat4x4[1][0] + v.z * mat4x4[2][0] + v.w * mat4x4[3][0];
-	o.y = v.x * mat4x4[0][1] + v.y * mat4x4[1][1] + v.z * mat4x4[2][1] + v.w * mat4x4[3][1];
-	o.z = v.x * mat4x4[0][2] + v.y * mat4x4[1][2] + v.z * mat4x4[2][2] + v.w * mat4x4[3][2];
-	o.w = v.x * mat4x4[0][3] + v.y * mat4x4[1][3] + v.z * mat4x4[2][3] + v.w * mat4x4[3][3];
-
-	return o;
-}
-
-static Vec4 Vec3MulMat4x4(const Vec3& v, float(*mat4x4)[4])
-{
-	Vec4 o;
-	
-	o.x = v.x * mat4x4[0][0] + v.y * mat4x4[1][0] + v.z * mat4x4[2][0] + mat4x4[3][0];
-	o.y = v.x * mat4x4[0][1] + v.y * mat4x4[1][1] + v.z * mat4x4[2][1] + mat4x4[3][1];
-	o.z = v.x * mat4x4[0][2] + v.y * mat4x4[1][2] + v.z * mat4x4[2][2] + mat4x4[3][2];
-	o.w = v.x * mat4x4[0][3] + v.y * mat4x4[1][3] + v.z * mat4x4[2][3] + mat4x4[3][3];
-	
-	return o;
-}
-
-static Vec3 Vec3MulMat4x3(const Vec3& v, float(*mat4x3)[3])
-{
-	Vec3 o;
-	o.x = v.x * mat4x3[0][0] + v.y * mat4x3[1][0] + v.z * mat4x3[2][0] + mat4x3[3][0];
-	o.y = v.x * mat4x3[0][1] + v.y * mat4x3[1][1] + v.z * mat4x3[2][1] + mat4x3[3][1];
-	o.z = v.x * mat4x3[0][2] + v.y * mat4x3[1][2] + v.z * mat4x3[2][2] + mat4x3[3][2];
-	return o;
-}
 
 void MapBuffer(ID3D11Buffer* pStageBuffer, void** ppData, UINT* pByteWidth)
 {
@@ -456,7 +668,9 @@ void MapBuffer(ID3D11Buffer* pStageBuffer, void** ppData, UINT* pByteWidth)
 
 	if (FAILED(res))
 	{
-		//Log("Map stage buffer failed {%d} {%d} {%d} {%d} {%d}", (void*)pStageBuffer, desc.ByteWidth, desc.BindFlags, desc.CPUAccessFlags, desc.Usage);
+		Log("Map stage buffer failed {%d} {%d} {%d} {%d} {%d}", (void*)pStageBuffer, desc.ByteWidth, desc.BindFlags, desc.CPUAccessFlags, desc.Usage);
+		SAFE_RELEASE(pStageBuffer);
+		return;
 	}
 
 	*ppData = subRes.pData;
@@ -470,13 +684,22 @@ void UnmapBuffer(ID3D11Buffer* pStageBuffer)
 	pContext->Unmap(pStageBuffer, 0);
 }
 
-ID3D11Buffer* CopyBufferToCpu(ID3D11Buffer* pBuffer)
+void CopyBufferToCpu(ID3D11Buffer* pInBuffer, ID3D11Buffer*& pOutBuffer)
 {
 	D3D11_BUFFER_DESC CBDesc;
-	pBuffer->GetDesc(&CBDesc);
+	pInBuffer->GetDesc(&CBDesc);
+	if (pOutBuffer != nullptr) {	// this probably is not needed
+		D3D11_BUFFER_DESC outDesc;
+		pOutBuffer->GetDesc(&outDesc);
+		if (outDesc.ByteWidth != CBDesc.ByteWidth)
+			SAFE_RELEASE(pOutBuffer);
+			//return;
+	}
 
-	ID3D11Buffer* pStageBuffer = NULL;
+	if (pOutBuffer == nullptr)
 	{ // create shadow buffer.
+	  //Log("called once");
+		performance_loss = true;
 		D3D11_BUFFER_DESC desc;
 		desc.BindFlags = 0;
 		desc.ByteWidth = CBDesc.ByteWidth;
@@ -484,21 +707,19 @@ ID3D11Buffer* CopyBufferToCpu(ID3D11Buffer* pBuffer)
 		desc.MiscFlags = 0;
 		desc.StructureByteStride = 0;
 		desc.Usage = D3D11_USAGE_STAGING;
-
-		if (FAILED(pDevice->CreateBuffer(&desc, NULL, &pStageBuffer)))
+		if (FAILED(pDevice->CreateBuffer(&desc, NULL, &pOutBuffer)))
 		{
-			//Log("CreateBuffer failed when CopyBufferToCpu {%d}", CBDesc.ByteWidth);
+			Log("CreateBuffer failed when CopyBufferToCpu {%d}", CBDesc.ByteWidth);
+			SAFE_RELEASE(pOutBuffer);
 		}
 	}
-
-	if (pStageBuffer != NULL)
-		pContext->CopyResource(pStageBuffer, pBuffer);
-
-	return pStageBuffer;
+	if (pOutBuffer != nullptr) {
+		pContext->CopyResource(pOutBuffer, pInBuffer);
+	}
 }
 
 //get distance
-float GetmDst(float Xx, float Yy, float xX, float yY)
+float GetDst(float Xx, float Yy, float xX, float yY)
 {
 	return sqrt((yY - Yy) * (yY - Yy) + (xX - Xx) * (xX - Xx));
 }
@@ -511,67 +732,81 @@ struct AimEspInfo_t
 std::vector<AimEspInfo_t>AimEspInfo;
 
 //w2s
-int WorldViewCBnum = 0;
 int ProjCBnum = 0;
-int matProjnum = 4;
-//Game			WorldViewCBnum		ProjCBnum		matProjnum
-//UT4 Alpha		2					1				16		
-//Fortnite		2					1				16
-//Outlast 		0					1				0 and 16
-//Warframe		0					0				0 or 4
-ID3D11Buffer* pWorldViewCB = nullptr;
+int matProjnum = 0;
+
 ID3D11Buffer* pProjCB = nullptr;
-ID3D11Buffer* m_pCurWorldViewCB = NULL;
 ID3D11Buffer* m_pCurProjCB = NULL;
+
 void AddModel(ID3D11DeviceContext* pContext)
 {
-	//Warning, this is NOT optimized:
+	pContext->VSGetConstantBuffers(0, 1, &pProjCB);//ProjCBnum changed to 0
 
-	pContext->VSGetConstantBuffers(WorldViewCBnum, 1, &pWorldViewCB);//WorldViewCBnum
+	if (pProjCB != nullptr)
+		CopyBufferToCpu(pProjCB, m_pCurProjCB);
 
-	if (m_pCurWorldViewCB == NULL && pWorldViewCB != NULL)
-	m_pCurWorldViewCB = CopyBufferToCpu(pWorldViewCB);
-	SAFE_RELEASE(pWorldViewCB);
-
-	pContext->VSGetConstantBuffers(ProjCBnum, 1, &pProjCB);//ProjCBnum
-
-	if (m_pCurProjCB == NULL && pProjCB != NULL)
-	m_pCurProjCB = CopyBufferToCpu(pProjCB);
-	SAFE_RELEASE(pProjCB);
-	
-	if (m_pCurWorldViewCB == NULL || m_pCurProjCB == NULL)//uncomment if a game is crashing
-	return;
-	
-	float matWorldView[4][4];
-	{
-		float* worldview;
-		MapBuffer(m_pCurWorldViewCB, (void**)&worldview, NULL);
-		memcpy(matWorldView, &worldview[0], sizeof(matWorldView));
-		//matWorldView[3][2] = matWorldView[3][2] + (aimheight * 10); //aimheight for body
-		//matWorldView[3][3] = matWorldView[3][3] - countnum;
-		UnmapBuffer(m_pCurWorldViewCB);
-		SAFE_RELEASE(m_pCurWorldViewCB);
+	if (m_pCurProjCB == nullptr) {
+		SAFE_RELEASE(pProjCB);
+		return;
 	}
-	Vec3 v;
-	Vec4 vWorldView = Vec3MulMat4x4(v, matWorldView);
-	
+
 	float matProj[4][4];
 	{
 		float *proj;
 		MapBuffer(m_pCurProjCB, (void**)&proj, NULL);
-		memcpy(matProj, &proj[matProjnum], sizeof(matProj));//matProjnum
+		memcpy(matProj, &proj[0], sizeof(matProj));//matProjnum changed to 0
 		UnmapBuffer(m_pCurProjCB);
-		SAFE_RELEASE(m_pCurProjCB);
 	}
-	Vec4 vWorldViewProj = Vec4MulMat4x4(vWorldView, matProj);
+	//SAFE_RELEASE(pWorldViewCB);
+	//SAFE_RELEASE(pProjCB);
 
+	//w2s 3 
+	float x = 0.0f;
+	float y = 300.0f + (float)aimheight * 100;
+	float z = 0.0f;
+	XMVECTOR Pos = XMVectorSet(x, y, z, 1.0f);
 
-	Vec2 o;
-	o.x = ScreenCenterX + ScreenCenterX * vWorldViewProj.x / vWorldViewProj.w;
-	o.y = ScreenCenterY - ScreenCenterY * vWorldViewProj.y / vWorldViewProj.w;
+	DirectX::XMMATRIX WorldViewProj = (FXMMATRIX)*matProj; //normal
 
+	float mx = Pos.m128_f32[0] * WorldViewProj.r[0].m128_f32[0] + Pos.m128_f32[1] * WorldViewProj.r[1].m128_f32[0] + Pos.m128_f32[2] * WorldViewProj.r[2].m128_f32[0] + Pos.m128_f32[3] * WorldViewProj.r[3].m128_f32[0];
+	float my = Pos.m128_f32[0] * WorldViewProj.r[0].m128_f32[1] + Pos.m128_f32[1] * WorldViewProj.r[1].m128_f32[1] + Pos.m128_f32[2] * WorldViewProj.r[2].m128_f32[1] + Pos.m128_f32[3] * WorldViewProj.r[3].m128_f32[1];
+	float mz = Pos.m128_f32[0] * WorldViewProj.r[0].m128_f32[2] + Pos.m128_f32[1] * WorldViewProj.r[1].m128_f32[2] + Pos.m128_f32[2] * WorldViewProj.r[2].m128_f32[2] + Pos.m128_f32[3] * WorldViewProj.r[3].m128_f32[2];
+	float mw = Pos.m128_f32[0] * WorldViewProj.r[0].m128_f32[3] + Pos.m128_f32[1] * WorldViewProj.r[1].m128_f32[3] + Pos.m128_f32[2] * WorldViewProj.r[2].m128_f32[3] + Pos.m128_f32[3] * WorldViewProj.r[3].m128_f32[3];
+	
+	float xx, yy;
+	if (mw > 0.2f)
+	{
+		xx = ((mx / mw) * (viewport.Width / 2.0f)) + (viewport.Width / 2.0f);
+		yy = (viewport.Height / 2.0f) - ((my / mw) * (viewport.Height / 2.0f));
+	}
+	else
+	{
+		xx = -1;
+		yy = -1;
+	}
+	AimEspInfo_t pAimEspInfo = { static_cast<float>(xx), static_cast<float>(yy) };
+	AimEspInfo.push_back(pAimEspInfo);
+
+	/*
+	//w2s 1
+	DirectX::XMVECTOR Pos = XMVectorSet(0.0f, 0.0f, 0.0f, 0.0f);
+
+	DirectX::XMFLOAT4 pOut2d;
+	DirectX::XMMATRIX pWorld = DirectX::XMMatrixIdentity();
+
+	//normal
+	DirectX::XMVECTOR pOut = DirectX::XMVector3Project(Pos, 0, 0, viewport.Width, viewport.Height, 0, 1, (FXMMATRIX)*matProj, (FXMMATRIX)*matWorldView, pWorld); //normal
+
+	DirectX::XMStoreFloat4(&pOut2d, pOut);
+
+	vec2 o;
+	if (pOut2d.z < 1.0f)
+	{
+		o.x = pOut2d.x;
+		o.y = pOut2d.y;
+	}
 	AimEspInfo_t pAimEspInfo = { static_cast<float>(o.x), static_cast<float>(o.y + (sOptions[6].Function * 10)) }; //aimheight for hp bars
 	AimEspInfo.push_back(pAimEspInfo);
+	*/
 }
 
-//==========================================================================================================================
