@@ -14,4 +14,4 @@ The DLL should be located in one of the subfolders of the folder that you opened
 ![alt tag](https://github.com/DrNseven/D3D11-Aimbot-Warframe/blob/master/warframed3d11.jpg)
 
 
-Credits: Wu ZhiQiang, dracorx, evolution536, Yazzn
+Credits: Wu ZhiQiang, dracorx, evolution536, Yazzn, loadeddeath
