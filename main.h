@@ -759,7 +759,7 @@ void AddModel(ID3D11DeviceContext* pContext)
 
 	//w2s 3 
 	float x = 0.0f;
-	float y = 300.0f + (float)aimheight * 100;
+	float y = ScreenCenterY + (float)aimheight * 100;//300
 	float z = 0.0f;
 	XMVECTOR Pos = XMVectorSet(x, y, z, 1.0f);
 
