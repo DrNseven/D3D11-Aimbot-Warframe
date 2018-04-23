@@ -91,14 +91,11 @@ ID3D11ShaderResourceView* texSRVr;
 //create samplerstate
 ID3D11SamplerState *pSamplerState;
 
-//#pragma intrinsic(_ReturnAddress) //Less indexes
-//#pragma intrinsic(_AddressOfReturnAddress) //Has more indexes
-
 static BOOL performance_loss = FALSE;
 
 //used for logging/cycling through values
 bool logger = false;
-UINT countnum = 1;
+UINT countnum = -1;
 char szString[64];
 
 #define SAFE_RELEASE(x) if (x) { x->Release(); x = NULL; }
@@ -628,8 +625,8 @@ void Draw_Menu()
 
 void Do_Menu()
 {
-	AddOption(L"Not Implemented", Item1, &Folder1);
-	AddOption(L"Not Implemented", Item2, &Folder1);
+	AddOption(L"Wallhack", Item1, &Folder1);
+	AddOption(L"Chams", Item2, &Folder1);
 	AddOption(L"Show Aimpoint", Item3, &Folder1);
 	Add012Option(L"Aimbot", Item4, &Folder1);
 	AddMultiOptionText(L"Aimkey", Item5, &Folder1);
@@ -784,7 +781,7 @@ void AddModel(ID3D11DeviceContext* pContext)
 		xx = -1;
 		yy = -1;
 	}
-	AimEspInfo_t pAimEspInfo = { static_cast<float>(xx), static_cast<float>(yy) };
+	AimEspInfo_t pAimEspInfo = { static_cast<float>(xx), static_cast<float>(yy-(viewport.Height/50.0f)) };//21,6 26
 	AimEspInfo.push_back(pAimEspInfo);
 
 	/*
