@@ -776,7 +776,7 @@ void AddModel(ID3D11DeviceContext* pContext)
 	pOuty = (viewport.Height / 2.0f) - ((my / mw) * (viewport.Height / 2.0f));
 	
 	float xx, yy;
-	if (mw > 0.2f && pOutx > 0.0f && pOuty > 0.0f && pOutx < viewport.Width && pOuty < viewport.Height))
+	if (mw > 0.2f && pOutx > 0.0f && pOuty > 0.0f && pOutx < viewport.Width && pOuty < viewport.Height)
 	{
 		xx = pOutx;
 		yy = pOuty;
