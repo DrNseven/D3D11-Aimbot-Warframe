@@ -759,7 +759,7 @@ void AddModel(ID3D11DeviceContext* pContext)
 
 	//w2s 3 
 	float x = 0.0f;
-	float y = ScreenCenterY + (float)aimheight * 100;//300
+	float y = ScreenCenterY + (float)aimheight * 100.0f;//300
 	float z = 0.0f;
 	XMVECTOR Pos = XMVectorSet(x, y, z, 1.0f);
 
@@ -770,16 +770,21 @@ void AddModel(ID3D11DeviceContext* pContext)
 	float mz = Pos.m128_f32[0] * WorldViewProj.r[0].m128_f32[2] + Pos.m128_f32[1] * WorldViewProj.r[1].m128_f32[2] + Pos.m128_f32[2] * WorldViewProj.r[2].m128_f32[2] + Pos.m128_f32[3] * WorldViewProj.r[3].m128_f32[2];
 	float mw = Pos.m128_f32[0] * WorldViewProj.r[0].m128_f32[3] + Pos.m128_f32[1] * WorldViewProj.r[1].m128_f32[3] + Pos.m128_f32[2] * WorldViewProj.r[2].m128_f32[3] + Pos.m128_f32[3] * WorldViewProj.r[3].m128_f32[3];
 	
+	float pOutx, pOuty;
+	
+	pOutx = ((mx / mw) * (viewport.Width / 2.0f)) + (viewport.Width / 2.0f);
+	pOuty = (viewport.Height / 2.0f) - ((my / mw) * (viewport.Height / 2.0f));
+	
 	float xx, yy;
-	if (mw > 0.2f)
+	if (mw > 0.2f && pOutx > 0.0f && pOuty > 0.0f && pOutx < viewport.Width && pOuty < viewport.Height))
 	{
-		xx = ((mx / mw) * (viewport.Width / 2.0f)) + (viewport.Width / 2.0f);
-		yy = (viewport.Height / 2.0f) - ((my / mw) * (viewport.Height / 2.0f));
+		xx = pOutx;
+		yy = pOuty;
 	}
 	else
 	{
-		xx = -1;
-		yy = -1;
+		xx = -1.0f;
+		yy = -1.0f;
 	}
 	AimEspInfo_t pAimEspInfo = { static_cast<float>(xx), static_cast<float>(yy-(viewport.Height/50.0f)) };//21,6 26
 	AimEspInfo.push_back(pAimEspInfo);
