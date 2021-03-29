@@ -1,7 +1,7 @@
 # D3D11-Aimbot-Warframe
 D3D11 Aimbot for Warframe
 
-* Do NOT use public injectors/injection method, you will be banned.
+* Warning this is detected! (ban)
 
 How to compile source code:
 https://www.unknowncheats.me/forum/fortnite/238458-visual-step-step-tutorial-compiling-code-github.html
